@@ -117,3 +117,7 @@ enabled = true
 # [[vectorize]]
 # binding = "MY_INDEX"
 # index_name = "my-index"
+
+[[kv_namespaces]]
+binding = "MHMIC_TELEGRAM_BOT"
+id = "6b49c3e222ee4bb68e067815c27e103c"
