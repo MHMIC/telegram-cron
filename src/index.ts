@@ -86,7 +86,27 @@ const getAudioUrl = (html: string) => {
 	return audioSrc;
 };
 
-const sendTelegramMessage = async (audioUrl: string, env: Env) => {
+const sendTelegramMessage = async (text: string, env: Env) => {
+	const TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN;
+	const CHAT_ID = env.CHAT_ID;
+
+	try {
+		const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				chat_id: CHAT_ID,
+				text: text,
+			}),
+		});
+	} catch (error) {
+		console.log(error);
+	}
+};
+
+const sendTelegramAudio = async (audioUrl: string, env: Env) => {
 	const TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN;
 	const CHAT_ID = env.CHAT_ID;
 
@@ -118,7 +138,7 @@ const send = async (env: Env) => {
 	const audioSrc = getAudioUrl(html);
 
 	if (audioSrc) {
-		await sendTelegramMessage(audioSrc, env);
+		await sendTelegramAudio(audioSrc, env);
 	}
 };
 
@@ -150,21 +170,11 @@ export default {
 		console.log(`trigger fired at ${event.cron}: ${wasSuccessful}`);
 	},
 	async fetch(request, env, ctx) {
-		const wordpressCount = await getCountFromWordpress('fr');
-		const kvCount = await getCountFromKV('fr', env);
+		await sendTelegramMessage('Force send the latest post', env);
+		await send(env);
 
-		if (wordpressCount > kvCount) {
-			await send(env);
-
-			await updateKVCount('fr', wordpressCount, env);
-
-			return Response.json({
-				message: 'Sent',
-			});
-		} else {
-			return Response.json({
-				message: 'Nothing sent',
-			});
-		}
+		return Response.json({
+			message: 'Sent',
+		});
 	},
 } satisfies ExportedHandler<Env>;
