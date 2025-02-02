@@ -16,6 +16,7 @@
  */
 
 import { load } from 'cheerio';
+import { cleanMp3Filename } from './utils';
 
 const WEBSITE = 'https://mhmic.org';
 const API_ENDPOINT = `${WEBSITE}/wp-json/wp/v2/posts`;
@@ -91,6 +92,7 @@ const sendTelegramMessage = async (text: string, env: Env) => {
 	const CHAT_ID = env.CHAT_ID;
 
 	try {
+		console.log(`sending.. to:`, CHAT_ID);
 		const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
 			method: 'POST',
 			headers: {
@@ -101,6 +103,7 @@ const sendTelegramMessage = async (text: string, env: Env) => {
 				text: text,
 			}),
 		});
+		console.log(await response.text());
 	} catch (error) {
 		console.log(error);
 	}
@@ -113,11 +116,14 @@ const sendTelegramAudio = async (audioUrl: string, env: Env) => {
 	// Fetch the audio file as a blob
 	const audioResponse = await fetch(audioUrl);
 	const audioBlob = await audioResponse.blob();
+	console.log('audioUrl', audioUrl);
+	const audioName = cleanMp3Filename(audioUrl);
+	console.log('audioName', audioName);
 
 	// Prepare form data to send the audio file
 	const formData = new FormData();
 	formData.append('chat_id', CHAT_ID);
-	formData.append('audio', audioBlob, audioUrl); // audioUrl is like 'audio.mp3' which is the filename
+	formData.append('audio', audioBlob, audioName); // audioUrl is like 'audio.mp3' which is the filename
 
 	try {
 		// Send the audio file to Telegram
@@ -170,7 +176,9 @@ export default {
 		console.log(`trigger fired at ${event.cron}: ${wasSuccessful}`);
 	},
 	async fetch(request, env, ctx) {
-		await sendTelegramMessage('Force send the latest post', env);
+		const url = new URL(request.url);
+		const text = url.searchParams.get('text');
+		await sendTelegramMessage(text || 'Force send the latest post', env);
 		await send(env);
 
 		return Response.json({
