@@ -70,6 +70,7 @@ const getCountFromKV = async (category: 'fr' | 'jk', env: Env) => {
 const updateKVCount = async (category: 'fr' | 'jk', count: number, env: Env) => {
 	try {
 		await env.MHMIC_TELEGRAM_BOT.put(category, count.toString());
+		return new Response(`count: ${count}`, { status: 200 });
 	} catch (e: any) {
 		return new Response(e.message, { status: 500 });
 	}
@@ -151,7 +152,8 @@ const send = async (env: Env) => {
 export default {
 	// The scheduled handler is invoked at the interval set in our wrangler.toml's
 	// [[triggers]] configuration.
-	async scheduled(event, env, ctx): Promise<void> {
+	async scheduled(event, env): Promise<void> {
+		let wasSuccessful = 'NA';
 		const wordpressCount = await getCountFromWordpress('fr');
 		const kvCount = await getCountFromKV('fr', env);
 
@@ -159,20 +161,12 @@ export default {
 			await send(env);
 
 			const resp = await updateKVCount('fr', wordpressCount, env);
+			wasSuccessful = resp.ok ? 'success' : 'fail';
 
 			console.log(`CRON Fired and message sent ${event.cron}`);
 		} else {
 			console.log(`CRON Fired and message was NOT sent ${event.cron}`);
 		}
-		// A Cron Trigger can make requests to other endpoints on the Internet,
-		// publish to a Queue, query a D1 Database, and much more.
-		//
-		// We'll keep it simple and make an API call to a Cloudflare API:
-		let resp = await fetch('https://api.cloudflare.com/client/v4/ips');
-		let wasSuccessful = resp.ok ? 'success' : 'fail';
-
-		// You could store this result in KV, write to a D1 Database, or publish to a Queue.
-		// In this template, we'll just log the result:
 		console.log(`trigger fired at ${event.cron}: ${wasSuccessful}`);
 	},
 	async fetch(request, env, ctx) {
