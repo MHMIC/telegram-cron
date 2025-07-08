@@ -7,11 +7,13 @@
 		"dev1": "wrangler dev",
 		"dev": "wrangler dev --test-scheduled",
 		"start": "wrangler dev --test-scheduled",
+		"test": "vitest",
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20250109.0",
 		"typescript": "^5.5.2",
+		"vitest": "^1.6.0",
 		"wrangler": "^3.60.3"
 	},
 	"dependencies": {
