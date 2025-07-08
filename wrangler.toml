@@ -1,6 +1,7 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "mhmic-telegram-cron"
 main = "src/index.ts"
+compatibility_flags = ["nodejs_compat"]
 compatibility_date = "2025-01-09"
 
 # Cron Triggers
