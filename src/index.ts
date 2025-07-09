@@ -15,6 +15,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import { Telegraf } from 'telegraf';
 import { load } from 'cheerio';
 import { cleanMp3Filename } from './utils';
 
@@ -89,51 +90,22 @@ const getAudioUrl = (html: string) => {
 };
 
 const sendTelegramMessage = async (text: string, env: Env) => {
-	const TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN;
-	const CHAT_ID = env.CHAT_ID;
-
+	const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
 	try {
-		console.log(`sending.. to:`, CHAT_ID);
-		const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				chat_id: CHAT_ID,
-				text: text,
-			}),
-		});
-		console.log(await response.text());
+		console.log(`sending.. to:`, env.CHAT_ID);
+		await bot.telegram.sendMessage(env.CHAT_ID, text);
+		console.log('Message sent successfully');
 	} catch (error) {
 		console.log(error);
 	}
 };
 
 const sendTelegramAudio = async (audioUrl: string, env: Env) => {
-	const TELEGRAM_BOT_TOKEN = env.TELEGRAM_BOT_TOKEN;
-	const CHAT_ID = env.CHAT_ID;
-
-	// Fetch the audio file as a blob
-	const audioResponse = await fetch(audioUrl);
-	const audioBlob = await audioResponse.blob();
-	console.log('audioUrl', audioUrl);
-	const audioName = cleanMp3Filename(audioUrl);
-	console.log('audioName', audioName);
-
-	// Prepare form data to send the audio file
-	const formData = new FormData();
-	formData.append('chat_id', CHAT_ID);
-	formData.append('audio', audioBlob, audioName); // audioUrl is like 'audio.mp3' which is the filename
-
+	const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
 	try {
-		// Send the audio file to Telegram
-		console.log(`sending.. to:`, CHAT_ID);
-		const telegramResponse = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendAudio`, {
-			method: 'POST',
-			body: formData,
-		});
-		console.log(await telegramResponse.text());
+		console.log(`sending.. to:`, env.CHAT_ID);
+		await bot.telegram.sendAudio(env.CHAT_ID, audioUrl);
+		console.log('Audio sent successfully');
 	} catch (error) {
 		console.log(error);
 	}
