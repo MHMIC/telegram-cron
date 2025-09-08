@@ -37,18 +37,54 @@ const getLatestPost = async (category: 'fr' | 'jk') => {
 		endpoint = `${API_ENDPOINT}/?per_page=1&categories=3`;
 	}
 
-	const data = await fetch(endpoint);
-	const posts: any[] = await data.json();
-	const post = posts[0];
+	try {
+		console.log(`Fetching latest post for category: ${category} from ${endpoint}`);
+		const data = await fetch(endpoint);
+		
+		if (!data.ok) {
+			console.error(`Failed to fetch posts: ${data.status} ${data.statusText}`);
+			throw new Error(`API request failed with status ${data.status}`);
+		}
 
-	return post;
+		const posts: any[] = await data.json();
+		
+		if (!posts || posts.length === 0) {
+			console.error(`No posts found for category: ${category}`);
+			throw new Error(`No posts found for category: ${category}`);
+		}
+
+		const post = posts[0];
+		console.log(`Successfully fetched post: ${post.title?.rendered || post.id}`);
+		return post;
+	} catch (error) {
+		console.error(`Error in getLatestPost for category ${category}:`, error);
+		throw error;
+	}
 };
 
 const getCountFromWordpress = async (category: 'fr' | 'jk') => {
-	const data = await fetch(`${CATEGORY_API_ENDPOINT}/${categoryIds[category]}`);
-	const categoryInfo: any = await data.json();
+	try {
+		console.log(`Fetching count for category: ${category} from WordPress API`);
+		const data = await fetch(`${CATEGORY_API_ENDPOINT}/${categoryIds[category]}`);
+		
+		if (!data.ok) {
+			console.error(`Failed to fetch category count: ${data.status} ${data.statusText}`);
+			throw new Error(`Category API request failed with status ${data.status}`);
+		}
 
-	return categoryInfo.count as number;
+		const categoryInfo: any = await data.json();
+		
+		if (!categoryInfo || typeof categoryInfo.count !== 'number') {
+			console.error(`Invalid category response for ${category}:`, categoryInfo);
+			throw new Error(`Invalid category response: missing or invalid count`);
+		}
+
+		console.log(`Successfully fetched count for category ${category}: ${categoryInfo.count}`);
+		return categoryInfo.count as number;
+	} catch (error) {
+		console.error(`Error in getCountFromWordpress for category ${category}:`, error);
+		throw error;
+	}
 };
 
 const getCountFromKV = async (category: 'fr' | 'jk', env: Env) => {
@@ -78,15 +114,47 @@ const updateKVCount = async (category: 'fr' | 'jk', count: number, env: Env) => 
 };
 
 const getHTML = async (slug: string) => {
-	const data = await fetch(`${FR_LINK}/${slug}`);
-	const html = await data.text();
-	return html;
+	try {
+		console.log(`Fetching HTML for slug: ${slug}`);
+		const data = await fetch(`${FR_LINK}/${slug}`);
+		
+		if (!data.ok) {
+			console.error(`Failed to fetch HTML for slug ${slug}: ${data.status} ${data.statusText}`);
+			throw new Error(`HTML fetch failed with status ${data.status}`);
+		}
+
+		const html = await data.text();
+		
+		if (!html || html.trim().length === 0) {
+			console.error(`Empty HTML response for slug: ${slug}`);
+			throw new Error(`Empty HTML response for slug: ${slug}`);
+		}
+
+		console.log(`Successfully fetched HTML for slug: ${slug} (${html.length} characters)`);
+		return html;
+	} catch (error) {
+		console.error(`Error in getHTML for slug ${slug}:`, error);
+		throw error;
+	}
 };
 
 const getAudioUrl = (html: string) => {
-	const $ = load(html);
-	const audioSrc = $('audio source').attr('src');
-	return audioSrc;
+	try {
+		console.log(`Parsing HTML to extract audio URL`);
+		const $ = load(html);
+		const audioSrc = $('audio source').attr('src');
+		
+		if (!audioSrc) {
+			console.error(`No audio source found in HTML`);
+			throw new Error(`No audio source found in HTML`);
+		}
+
+		console.log(`Successfully extracted audio URL: ${audioSrc}`);
+		return audioSrc;
+	} catch (error) {
+		console.error(`Error in getAudioUrl:`, error);
+		throw error;
+	}
 };
 
 const sendTelegramMessage = async (text: string, env: Env) => {
@@ -112,12 +180,22 @@ const sendTelegramAudio = async (audioUrl: string, env: Env) => {
 };
 
 const send = async (env: Env) => {
-	const post = await getLatestPost('fr');
-	const html = await getHTML(post.slug);
-	const audioSrc = getAudioUrl(html);
+	try {
+		console.log(`Starting send process for latest FR post`);
+		const post = await getLatestPost('fr');
+		const html = await getHTML(post.slug);
+		const audioSrc = getAudioUrl(html);
 
-	if (audioSrc) {
-		await sendTelegramAudio(audioSrc, env);
+		if (audioSrc) {
+			await sendTelegramAudio(audioSrc, env);
+			console.log(`Successfully completed send process`);
+		} else {
+			console.error(`No audio source found, cannot send audio`);
+			throw new Error(`No audio source found for post: ${post.slug}`);
+		}
+	} catch (error) {
+		console.error(`Error in send function:`, error);
+		throw error;
 	}
 };
 
@@ -126,29 +204,53 @@ export default {
 	// [[triggers]] configuration.
 	async scheduled(event, env): Promise<void> {
 		let wasSuccessful = 'NA';
-		const wordpressCount = await getCountFromWordpress('fr');
-		const kvCount = await getCountFromKV('fr', env);
+		try {
+			console.log(`CRON job started at ${event.cron}`);
+			const wordpressCount = await getCountFromWordpress('fr');
+			const kvCount = await getCountFromKV('fr', env);
 
-		if (wordpressCount > kvCount) {
-			await send(env);
+			console.log(`WordPress count: ${wordpressCount}, KV count: ${kvCount}`);
 
-			const resp = await updateKVCount('fr', wordpressCount, env);
-			wasSuccessful = resp.ok ? 'success' : 'fail';
+			if (wordpressCount > kvCount) {
+				await send(env);
 
-			console.log(`CRON Fired and message sent ${event.cron}`);
-		} else {
-			console.log(`CRON Fired and message was NOT sent ${event.cron}`);
+				const resp = await updateKVCount('fr', wordpressCount, env);
+				wasSuccessful = resp.ok ? 'success' : 'fail';
+
+				if (wasSuccessful === 'success') {
+					console.log(`CRON Fired and message sent successfully ${event.cron}`);
+				} else {
+					console.error(`CRON Fired but failed to update KV count ${event.cron}`);
+				}
+			} else {
+				console.log(`CRON Fired but no new posts found ${event.cron}`);
+			}
+		} catch (error) {
+			console.error(`CRON job failed at ${event.cron}:`, error);
+			wasSuccessful = 'error';
 		}
-		console.log(`trigger fired at ${event.cron}: ${wasSuccessful}`);
+		console.log(`CRON trigger completed at ${event.cron}: ${wasSuccessful}`);
 	},
 	async fetch(request, env, ctx) {
-		const url = new URL(request.url);
-		const text = url.searchParams.get('text');
-		await sendTelegramMessage(text || 'Force send the latest post', env);
-		await send(env);
+		try {
+			console.log(`Manual trigger received: ${request.url}`);
+			const url = new URL(request.url);
+			const text = url.searchParams.get('text');
+			
+			console.log(`Sending manual message: ${text || 'Force send the latest post'}`);
+			await sendTelegramMessage(text || 'Force send the latest post', env);
+			await send(env);
 
-		return Response.json({
-			message: 'Sent',
-		});
+			console.log(`Manual trigger completed successfully`);
+			return Response.json({
+				message: 'Sent',
+			});
+		} catch (error) {
+			console.error(`Manual trigger failed:`, error);
+			return Response.json({
+				message: 'Failed',
+				error: error instanceof Error ? error.message : 'Unknown error',
+			}, { status: 500 });
+		}
 	},
 } satisfies ExportedHandler<Env>;
