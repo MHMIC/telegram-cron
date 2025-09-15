@@ -3,11 +3,12 @@ import { sendTelegramMessage, sendTelegramAudio } from './telegram';
 import { getHTML, getAudioUrl } from './audio';
 import { getCountFromKV, updateKVCount } from './storage';
 import { cleanMp3Filename } from './utils';
+import { notifyHighSeverityError, notifyCriticalError } from './notifications';
 
 export const send = async (env: Env) => {
 	try {
 		console.log(`Starting send process for latest FR post`);
-		const post = await getLatestPost('fr');
+		const post = await getLatestPost('fr', env);
 		const html = await getHTML(post.slug);
 		const audioSrc = getAudioUrl(html);
 
@@ -20,6 +21,8 @@ export const send = async (env: Env) => {
 		}
 	} catch (error) {
 		console.error(`Error in send function:`, error);
+		// Send high severity notification for send failures
+		await notifyHighSeverityError(env, error, 'send_function');
 		throw error;
 	}
 };
@@ -28,7 +31,7 @@ export const scheduledHandler = async (event: ScheduledController, env: Env): Pr
 	let wasSuccessful = 'NA';
 	try {
 		console.log(`CRON job started at ${event.cron}`);
-		const wordpressCount = await getCountFromWordpress('fr');
+		const wordpressCount = await getCountFromWordpress('fr', env);
 		const kvCount = await getCountFromKV('fr', env);
 
 		console.log(`WordPress count: ${wordpressCount}, KV count: ${kvCount}`);
@@ -50,6 +53,8 @@ export const scheduledHandler = async (event: ScheduledController, env: Env): Pr
 	} catch (error) {
 		console.error(`CRON job failed at ${event.cron}:`, error);
 		wasSuccessful = 'error';
+		// Send critical notification for CRON job failures
+		await notifyCriticalError(env, error, 'scheduled_cron_job');
 	}
 	console.log(`CRON trigger completed at ${event.cron}: ${wasSuccessful}`);
 };
@@ -70,6 +75,8 @@ export const fetchHandler = async (request: Request, env: Env, ctx: ExecutionCon
 		});
 	} catch (error) {
 		console.error(`Manual trigger failed:`, error);
+		// Send high severity notification for manual trigger failures
+		await notifyHighSeverityError(env, error, 'manual_trigger');
 		return Response.json({
 			message: 'Failed',
 			error: error instanceof Error ? error.message : 'Unknown error',

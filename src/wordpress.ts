@@ -1,3 +1,5 @@
+import { notifyMediumSeverityError } from './notifications';
+
 const WEBSITE = 'https://mhmic.org';
 const API_ENDPOINT = `${WEBSITE}/wp-json/wp/v2/posts`;
 const CATEGORY_API_ENDPOINT = `${WEBSITE}/wp-json/wp/v2/categories`;
@@ -7,7 +9,7 @@ const categoryIds = {
 	jk: '3',
 };
 
-export const getLatestPost = async (category: 'fr' | 'jk') => {
+export const getLatestPost = async (category: 'fr' | 'jk', env?: Env) => {
 	let endpoint = API_ENDPOINT;
 	if (category === 'fr') {
 		endpoint = `${API_ENDPOINT}/?per_page=1&categories=2`;
@@ -36,11 +38,14 @@ export const getLatestPost = async (category: 'fr' | 'jk') => {
 		return post;
 	} catch (error) {
 		console.error(`Error in getLatestPost for category ${category}:`, error);
+		if (env) {
+			await notifyMediumSeverityError(env, error, `wordpress_get_latest_post_${category}`);
+		}
 		throw error;
 	}
 };
 
-export const getCountFromWordpress = async (category: 'fr' | 'jk') => {
+export const getCountFromWordpress = async (category: 'fr' | 'jk', env?: Env) => {
 	try {
 		console.log(`Fetching count for category: ${category} from WordPress API`);
 		const data = await fetch(`${CATEGORY_API_ENDPOINT}/${categoryIds[category]}`);
@@ -61,6 +66,9 @@ export const getCountFromWordpress = async (category: 'fr' | 'jk') => {
 		return categoryInfo.count as number;
 	} catch (error) {
 		console.error(`Error in getCountFromWordpress for category ${category}:`, error);
+		if (env) {
+			await notifyMediumSeverityError(env, error, `wordpress_get_count_${category}`);
+		}
 		throw error;
 	}
 };

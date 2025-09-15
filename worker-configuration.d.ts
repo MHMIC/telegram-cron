@@ -4,4 +4,7 @@ interface Env {
 	MHMIC_TELEGRAM_BOT: KVNamespace;
 	TELEGRAM_BOT_TOKEN: string;
 	CHAT_ID: string;
+	// Error notification settings
+	ERROR_CHAT_ID?: string;
+	ERROR_NOTIFICATION_RATE_LIMIT?: string;
 }
