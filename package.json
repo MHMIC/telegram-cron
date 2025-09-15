@@ -7,7 +7,8 @@
 		"dev1": "wrangler dev",
 		"dev": "wrangler dev --test-scheduled",
 		"start": "wrangler dev --test-scheduled",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"build": "wrangler build"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20250109.0",
@@ -15,7 +16,6 @@
 		"wrangler": "^3.60.3"
 	},
 	"dependencies": {
-		"cheerio": "^1.0.0",
-		"telegraf": "^4.16.3"
+		"cheerio": "^1.0.0"
 	}
 }
