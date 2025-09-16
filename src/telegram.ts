@@ -1,4 +1,6 @@
-export const sendTelegramMessage = async (text: string, env: Env) => {
+import { env } from 'cloudflare:workers';
+
+export const sendTelegramMessage = async (text: string) => {
 	try {
 		console.log(`Sending message to chat: ${env.MAIN_CHAT_ID}`);
 		const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -24,7 +26,7 @@ export const sendTelegramMessage = async (text: string, env: Env) => {
 	}
 };
 
-export const sendTelegramAudio = async (audioUrl: string, env: Env) => {
+export const sendTelegramAudio = async (audioUrl: string) => {
 	if (!audioUrl || !audioUrl.startsWith('http')) {
 		throw new Error(`Invalid audio URL: ${audioUrl}`);
 	}
@@ -60,7 +62,7 @@ export const sendTelegramAudio = async (audioUrl: string, env: Env) => {
 	}
 };
 
-export const sendErrorNotification = async (error: string, env: Env) => {
+export const sendErrorNotification = async (error: string) => {
 	if (!env.NOTIFICATIONS_CHAT_ID) {
 		console.log('NOTIFICATIONS_CHAT_ID not configured, skipping error notification');
 		return;

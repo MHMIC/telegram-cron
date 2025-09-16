@@ -1,4 +1,6 @@
-export const getCountFromKV = async (category: 'fr' | 'jk', env: Env) => {
+import { env } from 'cloudflare:workers';
+
+export const getCountFromKV = async (category: 'fr' | 'jk') => {
 	try {
 		console.log(`Fetching count from KV for category: ${category}`);
 		const countStr = await env.MHMIC_TELEGRAM_BOT.get(category);
@@ -18,7 +20,7 @@ export const getCountFromKV = async (category: 'fr' | 'jk', env: Env) => {
 	}
 };
 
-export const updateKVCount = async (category: 'fr' | 'jk', count: number, env: Env) => {
+export const updateKVCount = async (category: 'fr' | 'jk', count: number) => {
 	try {
 		console.log(`Updating KV count for ${category} to: ${count}`);
 		await env.MHMIC_TELEGRAM_BOT.put(category, count.toString());

@@ -16,10 +16,10 @@ import { scheduledHandler, fetchHandler } from './handlers';
 export default {
 	// The scheduled handler is invoked at the interval set in our wrangler.toml's
 	// [[triggers]] configuration.
-	async scheduled(event, env): Promise<void> {
-		await scheduledHandler(event, env);
+	async scheduled(event): Promise<void> {
+		await scheduledHandler(event);
 	},
-	async fetch(request, env, ctx) {
-		return await fetchHandler(request, env, ctx);
+	async fetch(request) {
+		return await fetchHandler(request);
 	},
 } satisfies ExportedHandler<Env>;

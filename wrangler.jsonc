@@ -1,0 +1,19 @@
+/* :schema node_modules/wrangler/config-schema.json */
+{
+	"name": "mhmic-telegram-cron",
+	"main": "src/index.ts",
+	"compatibility_flags": ["nodejs_compat"],
+	"compatibility_date": "2025-01-09",
+	"triggers": {
+		"crons": ["*/10 * * * *"]
+	},
+	"observability": {
+		"enabled": true
+	},
+	"kv_namespaces": [
+		{
+			"binding": "MHMIC_TELEGRAM_BOT",
+			"id": "6b49c3e222ee4bb68e067815c27e103c"
+		}
+	]
+}
