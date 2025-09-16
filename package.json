@@ -8,10 +8,13 @@
 		"dev": "wrangler dev --test-scheduled",
 		"start": "wrangler dev --test-scheduled",
 		"cf-typegen": "wrangler types",
-		"build": "wrangler build"
+		"build": "wrangler build",
+		"test": "vitest run"
 	},
 	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.9.1",
 		"typescript": "^5.5.2",
+		"vitest": "~3.2.0",
 		"wrangler": "^4.37.0"
 	},
 	"dependencies": {

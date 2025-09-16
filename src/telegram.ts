@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { extractAudioFilename } from './utils';
 
 export const sendTelegramMessage = async (text: string) => {
 	try {
@@ -32,9 +33,7 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 	}
 
 	// Extract filename from URL
-	const urlParts = audioUrl.split('/');
-	const filename = urlParts[urlParts.length - 1].split('?')[0] || 'audio.mp3';
-	const cleanTitle = filename.replace(/-/g, ' ').replace('.mp3', '');
+	const { filename, cleanTitle } = extractAudioFilename(audioUrl);
 
 	// Download the file and upload as multipart form data
 	const audioResponse = await fetch(audioUrl);
@@ -48,10 +47,10 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 	// Create multipart form data
 	const formData = new FormData();
 	formData.append('chat_id', env.MAIN_CHAT_ID);
-	formData.append('document', new Blob([audioBuffer], { type: 'audio/mpeg' }), filename);
-	formData.append('caption', `🎵 New Fajr Reminder: ${cleanTitle}`);
+	formData.append('audio', new Blob([audioBuffer], { type: 'audio/mpeg' }), filename);
+	formData.append('title', cleanTitle);
 
-	const uploadResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, {
+	const uploadResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendAudio`, {
 		method: 'POST',
 		body: formData,
 	});

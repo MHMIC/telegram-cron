@@ -6,7 +6,7 @@ import { getCountFromKV, updateKVCount } from './storage';
 export const send = async () => {
 	try {
 		console.log('Starting send operation');
-		const post = await getLatestPost('fr');
+		const post = await getLatestPost('FR');
 		const html = await getHTML(post.slug);
 		const audioSrc = getAudioUrl(html);
 
@@ -30,7 +30,7 @@ export const scheduledHandler = async (event: ScheduledController): Promise<void
 		console.log(`CRON triggered at ${event.cron}`);
 		let wasSuccessful = 'NA';
 
-		const wordpressCount = await getCountFromWordpress('fr');
+		const wordpressCount = await getCountFromWordpress('FR');
 		const kvCount = await getCountFromKV('fr');
 
 		console.log(`WordPress count: ${wordpressCount}, KV count: ${kvCount}`);
