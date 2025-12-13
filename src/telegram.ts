@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { extractAudioFilename } from './utils';
+import { parseBuffer } from 'music-metadata';
 
 export const sendTelegramMessage = async (text: string) => {
 	try {
@@ -44,11 +45,46 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 
 	const audioBuffer = await audioResponse.arrayBuffer();
 
+	// Parse metadata
+	let duration: number | undefined;
+	let title = cleanTitle;
+	let performer: string | undefined;
+
+	try {
+		const uint8Array = new Uint8Array(audioBuffer);
+		const metadata = await parseBuffer(uint8Array);
+
+		if (metadata.format.duration) {
+			duration = Math.round(metadata.format.duration);
+		}
+
+		if (metadata.common.title) {
+			title = metadata.common.title;
+		}
+
+		if (metadata.common.artist) {
+			performer = metadata.common.artist;
+		}
+
+		console.log(`Extracted metadata - Duration: ${duration}s, Title: ${title}, Performer: ${performer}`);
+	} catch (error) {
+		console.error('Failed to parse audio metadata:', error);
+		// Fallback to defaults if parsing fails
+	}
+
 	// Create multipart form data
 	const formData = new FormData();
 	formData.append('chat_id', env.MAIN_CHAT_ID);
 	formData.append('audio', new Blob([audioBuffer], { type: 'audio/mpeg' }), filename);
-	formData.append('title', cleanTitle);
+	formData.append('title', title);
+
+	if (duration) {
+		formData.append('duration', duration.toString());
+	}
+
+	if (performer) {
+		formData.append('performer', performer);
+	}
 
 	const uploadResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendAudio`, {
 		method: 'POST',

@@ -19,6 +19,7 @@
 	},
 	"dependencies": {
 		"@types/node": "^24.5.0",
-		"cheerio": "^1.0.0"
+		"cheerio": "^1.0.0",
+		"music-metadata": "^11.10.3"
 	}
 }
