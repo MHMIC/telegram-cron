@@ -1,80 +1,106 @@
-import { getLatestPost, getCountFromWordpress } from './wordpress';
+import { env } from 'cloudflare:workers';
+import { getLatestPost, getPublishedAt, WordPressPost } from './wordpress';
 import { sendTelegramAudio, sendErrorNotification } from './telegram';
 import { getHTML, getAudioUrl } from './audio';
-import { getCountFromKV, updateKVCount } from './storage';
+import { getLastSentAt, setLastSentAt } from './storage';
+import { secretsMatch } from './utils';
 
-export const send = async () => {
-	try {
-		console.log('Starting send operation');
-		const post = await getLatestPost('FR');
-		const html = await getHTML(post.slug);
-		const audioSrc = getAudioUrl(html);
+const CATEGORY = 'FR';
+const STORAGE_CATEGORY = 'fr';
 
-		if (audioSrc) {
-			await sendTelegramAudio(audioSrc);
-		} else {
-			throw new Error('No audio source found');
-		}
+const jsonResponse = (body: Record<string, unknown>, status: number) =>
+	Response.json({ ...body, timestamp: new Date().toISOString() }, { status });
 
-		console.log('Send operation completed successfully');
-	} catch (error) {
-		const errorMessage = `Error in send operation: ${error instanceof Error ? error.message : 'Unknown error'}`;
-		console.error(errorMessage);
-		await sendErrorNotification(errorMessage);
-		throw error;
-	}
+const describeError = (error: unknown) => (error instanceof Error ? error.message : 'Unknown error');
+
+/**
+ * Sends the audio attached to a post. Errors propagate to the caller, which owns
+ * error notification, so a single failure is only reported once.
+ */
+export const send = async (post: WordPressPost) => {
+	console.log(`Starting send operation for post: ${post.slug}`);
+
+	const html = await getHTML(post.slug);
+	const audioSrc = getAudioUrl(html);
+
+	await sendTelegramAudio(audioSrc);
+
+	console.log('Send operation completed successfully');
 };
 
 export const scheduledHandler = async (event: ScheduledController): Promise<void> => {
 	try {
 		console.log(`CRON triggered at ${event.cron}`);
-		let wasSuccessful = 'NA';
 
-		const wordpressCount = await getCountFromWordpress('FR');
-		const kvCount = await getCountFromKV('fr');
+		const post = await getLatestPost(CATEGORY);
+		const publishedAt = getPublishedAt(post);
+		const lastSentAt = await getLastSentAt(STORAGE_CATEGORY);
 
-		console.log(`WordPress count: ${wordpressCount}, KV count: ${kvCount}`);
-
-		if (wordpressCount > kvCount) {
-			await send();
-
-			const resp = await updateKVCount('fr', wordpressCount);
-			wasSuccessful = resp.ok ? 'success' : 'fail';
-
-			console.log(`CRON Fired and message sent ${event.cron}`);
-		} else {
-			console.log(`CRON Fired and message was NOT sent ${event.cron}`);
-			wasSuccessful = 'no_new_content';
+		if (lastSentAt === null) {
+			// First run against an empty namespace. Record the current position
+			// rather than sending a reminder that has almost certainly gone out
+			// already.
+			await setLastSentAt(STORAGE_CATEGORY, publishedAt);
+			console.log(`CRON fired at ${event.cron}: seeded last sent timestamp with ${post.slug} (${publishedAt})`);
+			return;
 		}
 
-		console.log(`Trigger fired at ${event.cron}: ${wasSuccessful}`);
+		// Comparing publish times rather than post counts means a deleted post
+		// cannot make an older reminder look new.
+		if (publishedAt <= lastSentAt) {
+			console.log(`CRON fired at ${event.cron}: no new content (latest is ${post.slug})`);
+			return;
+		}
+
+		await send(post);
+
+		// Recorded only after a successful send, so a failed send is retried on
+		// the next tick instead of being marked as delivered.
+		await setLastSentAt(STORAGE_CATEGORY, publishedAt);
+
+		console.log(`CRON fired at ${event.cron}: sent ${post.slug}`);
 	} catch (error) {
-		const errorMessage = `Error in scheduled handler: ${error instanceof Error ? error.message : 'Unknown error'}`;
+		const errorMessage = `Error in scheduled handler: ${describeError(error)}`;
 		console.error(errorMessage);
 		await sendErrorNotification(errorMessage);
 		throw error;
 	}
 };
 
-export const fetchHandler = async (request: Request) => {
+/**
+ * Manual trigger. Guarded by a shared secret because an unauthenticated request
+ * would let anyone post to the chat and pull a full audio download through the
+ * worker.
+ */
+export const fetchHandler = async (request: Request): Promise<Response> => {
+	if (request.method !== 'POST') {
+		return jsonResponse({ error: 'Method not allowed' }, 405);
+	}
+
+	if (!env.TRIGGER_SECRET) {
+		console.error('TRIGGER_SECRET is not configured, refusing manual trigger');
+		return jsonResponse({ error: 'Manual trigger is not configured' }, 503);
+	}
+
+	const provided = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+
+	if (!secretsMatch(provided, env.TRIGGER_SECRET)) {
+		return jsonResponse({ error: 'Unauthorized' }, 401);
+	}
+
 	try {
-		await send();
-		return Response.json({
-			message: 'Sent',
-			timestamp: new Date().toISOString(),
-		});
+		const post = await getLatestPost(CATEGORY);
+		const publishedAt = getPublishedAt(post);
+
+		await send(post);
+		await setLastSentAt(STORAGE_CATEGORY, publishedAt);
+
+		return jsonResponse({ message: 'Sent', slug: post.slug }, 200);
 	} catch (error) {
-		const errorMessage = `Error in fetch handler: ${error instanceof Error ? error.message : 'Unknown error'}`;
+		const errorMessage = `Error in fetch handler: ${describeError(error)}`;
 		console.error(errorMessage);
 		await sendErrorNotification(errorMessage);
 
-		return Response.json(
-			{
-				error: 'Failed to process request',
-				message: error instanceof Error ? error.message : 'Unknown error',
-				timestamp: new Date().toISOString(),
-			},
-			{ status: 500 }
-		);
+		return jsonResponse({ error: 'Failed to process request', message: describeError(error) }, 500);
 	}
 };
