@@ -2,30 +2,38 @@ import { env } from 'cloudflare:workers';
 import { extractAudioFilename } from './utils';
 import { parseBuffer } from 'music-metadata';
 
-export const sendTelegramMessage = async (text: string) => {
-	try {
-		console.log(`Sending message to chat: ${env.MAIN_CHAT_ID}`);
-		const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				chat_id: env.MAIN_CHAT_ID,
-				text: text,
-			}),
-		});
+// Telegram rejects bot uploads larger than 50 MB, and the whole file is held in
+// memory here, so oversized audio is rejected before it is downloaded.
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
 
-		if (!response.ok) {
-			const errorData = (await response.json()) as any;
-			throw new Error(`Telegram API error: ${response.status} - ${errorData.description || 'Unknown error'}`);
-		}
+interface TelegramErrorResponse {
+	description?: string;
+}
 
-		console.log('Message sent successfully');
-	} catch (error) {
-		console.error('Error sending Telegram message:', error);
-		throw error;
+const telegramUrl = (method: string) => `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`;
+
+const assertTelegramOk = async (response: Response, action: string) => {
+	if (response.ok) {
+		return;
 	}
+
+	const errorData = (await response.json().catch(() => ({}))) as TelegramErrorResponse;
+	throw new Error(`${action} failed: ${response.status} - ${errorData.description || 'Unknown error'}`);
+};
+
+const sendMessage = async (chatId: string, text: string) => {
+	const response = await fetch(telegramUrl('sendMessage'), {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({
+			chat_id: chatId,
+			text,
+		}),
+	});
+
+	await assertTelegramOk(response, 'Telegram sendMessage');
 };
 
 export const sendTelegramAudio = async (audioUrl: string) => {
@@ -43,7 +51,17 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 		throw new Error(`Failed to download audio: ${audioResponse.status} ${audioResponse.statusText}`);
 	}
 
+	const declaredLength = Number(audioResponse.headers.get('content-length'));
+
+	if (Number.isFinite(declaredLength) && declaredLength > MAX_AUDIO_BYTES) {
+		throw new Error(`Audio is too large to send: ${declaredLength} bytes exceeds the ${MAX_AUDIO_BYTES} byte limit`);
+	}
+
 	const audioBuffer = await audioResponse.arrayBuffer();
+
+	if (audioBuffer.byteLength > MAX_AUDIO_BYTES) {
+		throw new Error(`Audio is too large to send: ${audioBuffer.byteLength} bytes exceeds the ${MAX_AUDIO_BYTES} byte limit`);
+	}
 
 	// Parse metadata
 	let duration: number | undefined;
@@ -86,15 +104,12 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 		formData.append('performer', performer);
 	}
 
-	const uploadResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendAudio`, {
+	const uploadResponse = await fetch(telegramUrl('sendAudio'), {
 		method: 'POST',
 		body: formData,
 	});
 
-	if (!uploadResponse.ok) {
-		const errorData = (await uploadResponse.json()) as any;
-		throw new Error(`Failed to upload audio: ${uploadResponse.status} - ${errorData.description || 'Unknown error'}`);
-	}
+	await assertTelegramOk(uploadResponse, 'Telegram sendAudio');
 };
 
 export const sendErrorNotification = async (error: string) => {
@@ -104,23 +119,7 @@ export const sendErrorNotification = async (error: string) => {
 	}
 
 	try {
-		const errorMessage = `🚨 MHMIC Bot Error:\n\n${error}`;
-		const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				chat_id: env.NOTIFICATIONS_CHAT_ID,
-				text: errorMessage,
-			}),
-		});
-
-		if (!response.ok) {
-			const errorData = (await response.json()) as any;
-			throw new Error(`Telegram API error: ${response.status} - ${errorData.description || 'Unknown error'}`);
-		}
-
+		await sendMessage(env.NOTIFICATIONS_CHAT_ID, `🚨 MHMIC Bot Error:\n\n${error}`);
 		console.log('Error notification sent successfully');
 	} catch (notificationError) {
 		console.error('Failed to send error notification:', notificationError);

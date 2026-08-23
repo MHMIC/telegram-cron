@@ -1,34 +1,43 @@
 import { env } from 'cloudflare:workers';
 
-export const getCountFromKV = async (category: 'fr' | 'jk') => {
-	try {
-		console.log(`Fetching count from KV for category: ${category}`);
-		const countStr = await env.MHMIC_TELEGRAM_BOT.get(category);
+export type StorageCategory = 'fr' | 'jk';
 
-		if (countStr === null) {
-			console.log(`No count found for ${category}, initializing to 0`);
-			await env.MHMIC_TELEGRAM_BOT.put(category, '0');
-			return parseInt('0');
-		}
+const lastSentKey = (category: StorageCategory) => `${category}:last-sent-at`;
 
-		const count = parseInt(countStr);
-		console.log(`Successfully fetched count from KV for ${category}: ${count}`);
-		return count;
-	} catch (error) {
-		console.error(`Error fetching count from KV for category ${category}:`, error);
-		return parseInt('0');
+/**
+ * Returns the publish time (epoch ms) of the most recently sent post, or null
+ * when nothing has been recorded for the category yet.
+ *
+ * Read failures propagate instead of defaulting to 0. A transient KV error must
+ * not look like "nothing has ever been sent", which would re-send the latest
+ * audio on every cron tick until KV recovered.
+ */
+export const getLastSentAt = async (category: StorageCategory): Promise<number | null> => {
+	const key = lastSentKey(category);
+	console.log(`Fetching last sent timestamp from KV for category: ${category}`);
+
+	const stored = await env.MHMIC_TELEGRAM_BOT.get(key);
+
+	if (stored === null) {
+		console.log(`No last sent timestamp found for ${category}`);
+		return null;
 	}
+
+	const lastSentAt = Number.parseInt(stored, 10);
+
+	if (Number.isNaN(lastSentAt)) {
+		throw new Error(`Corrupt value in KV for ${key}: "${stored}"`);
+	}
+
+	console.log(`Last sent timestamp for ${category}: ${lastSentAt}`);
+	return lastSentAt;
 };
 
-export const updateKVCount = async (category: 'fr' | 'jk', count: number) => {
-	try {
-		console.log(`Updating KV count for ${category} to: ${count}`);
-		await env.MHMIC_TELEGRAM_BOT.put(category, count.toString());
-		console.log(`Successfully updated KV count for ${category}`);
-		return new Response(`count: ${count}`, { status: 200 });
-	} catch (error) {
-		console.error(`Error updating KV count for category ${category}:`, error);
-		const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-		return new Response(errorMessage, { status: 500 });
-	}
+/**
+ * Records the publish time (epoch ms) of the post that was just sent.
+ */
+export const setLastSentAt = async (category: StorageCategory, publishedAt: number): Promise<void> => {
+	console.log(`Updating last sent timestamp for ${category} to: ${publishedAt}`);
+	await env.MHMIC_TELEGRAM_BOT.put(lastSentKey(category), publishedAt.toString());
+	console.log(`Successfully updated last sent timestamp for ${category}`);
 };

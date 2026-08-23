@@ -1,7 +1,6 @@
 // WordPress API Configuration
 const WEBSITE = 'https://mhmic.org';
 const API_ENDPOINT = `${WEBSITE}/wp-json/wp/v2/posts`;
-const CATEGORY_API_ENDPOINT = `${WEBSITE}/wp-json/wp/v2/categories`;
 
 // Category configuration
 const CATEGORIES = {
@@ -9,10 +8,10 @@ const CATEGORIES = {
 	JK: { id: '3', name: 'Jummah Khutbah' },
 } as const;
 
-type Category = keyof typeof CATEGORIES;
+export type Category = keyof typeof CATEGORIES;
 
 // WordPress API Types
-interface WordPressPost {
+export interface WordPressPost {
 	id: number;
 	slug: string;
 	title: {
@@ -22,18 +21,28 @@ interface WordPressPost {
 		rendered: string;
 	};
 	date: string;
+	date_gmt: string;
 	modified: string;
 	link: string;
 	categories: number[];
 }
 
-interface WordPressCategory {
-	id: number;
-	count: number;
-	name: string;
-	slug: string;
-	description: string;
-}
+/**
+ * Returns a post's publish time as epoch milliseconds.
+ *
+ * WordPress serves `date_gmt` without a timezone suffix, so it is pinned to UTC
+ * before parsing; `date` (site local time) is only a fallback.
+ */
+export const getPublishedAt = (post: Pick<WordPressPost, 'date' | 'date_gmt'>): number => {
+	const raw = post.date_gmt ? (post.date_gmt.endsWith('Z') ? post.date_gmt : `${post.date_gmt}Z`) : post.date;
+	const publishedAt = Date.parse(raw);
+
+	if (Number.isNaN(publishedAt)) {
+		throw new Error(`Unparseable post date: ${post.date_gmt || post.date}`);
+	}
+
+	return publishedAt;
+};
 
 /**
  * Fetches the latest post from a specific category
@@ -63,38 +72,6 @@ export const getLatestPost = async (category: Category): Promise<WordPressPost> 
 		return post;
 	} catch (error) {
 		const errorMessage = `Failed to fetch latest post for category ${category}`;
-		console.error(errorMessage, error);
-		throw new Error(`${errorMessage}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-	}
-};
-
-/**
- * Fetches the post count for a specific category from WordPress
- */
-export const getCountFromWordpress = async (category: Category): Promise<number> => {
-	const categoryId = CATEGORIES[category].id;
-	const endpoint = `${CATEGORY_API_ENDPOINT}/${categoryId}`;
-
-	try {
-		console.log(`Fetching post count for category: ${category} (${CATEGORIES[category].name})`);
-
-		const response = await fetch(endpoint);
-
-		if (!response.ok) {
-			throw new Error(`WordPress API error: ${response.status} ${response.statusText}`);
-		}
-
-		const categoryInfo: WordPressCategory = await response.json();
-
-		if (!categoryInfo || typeof categoryInfo.count !== 'number') {
-			throw new Error(`Invalid category response: missing or invalid count field`);
-		}
-
-		console.log(`Successfully fetched count for ${category}: ${categoryInfo.count} posts`);
-
-		return categoryInfo.count;
-	} catch (error) {
-		const errorMessage = `Failed to fetch post count for category ${category}`;
 		console.error(errorMessage, error);
 		throw new Error(`${errorMessage}: ${error instanceof Error ? error.message : 'Unknown error'}`);
 	}
