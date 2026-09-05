@@ -1,10 +1,40 @@
 import { env } from 'cloudflare:workers';
 import { extractAudioFilename } from './utils';
+import type { Enclosure } from './feed';
 import { parseBuffer } from 'music-metadata';
 
+// Telegram fetches the file itself at this size or below, so nothing passes
+// through the worker.
+const MAX_URL_SEND_BYTES = 20 * 1024 * 1024;
+
 // Telegram rejects bot uploads larger than 50 MB, and the whole file is held in
-// memory here, so oversized audio is rejected before it is downloaded.
+// memory on the upload path, so oversized audio is rejected before download.
 const MAX_AUDIO_BYTES = 50 * 1024 * 1024;
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+	mp3: 'audio/mpeg',
+	m4a: 'audio/mp4',
+	ogg: 'audio/ogg',
+	opus: 'audio/ogg',
+	wav: 'audio/wav',
+	flac: 'audio/flac',
+};
+
+const extensionOf = (url: string): string => {
+	try {
+		return new URL(url).pathname.split('.').pop()?.toLowerCase() ?? '';
+	} catch {
+		return '';
+	}
+};
+
+// The feed's declared type is unreliable — a .wav has been seen announced as
+// audio/mpeg — so the extension wins.
+const mimeFor = (url: string, declaredType: string): string => MIME_BY_EXTENSION[extensionOf(url)] || declaredType || 'application/octet-stream';
+
+// extractAudioFilename only strips a .mp3 suffix, which leaves the extension
+// visible in the Telegram title for any other format.
+const stripExtension = (title: string): string => title.replace(/\.(mp3|m4a|ogg|opus|wav|flac)$/i, '');
 
 interface TelegramErrorResponse {
 	description?: string;
@@ -36,16 +66,50 @@ const sendMessage = async (chatId: string, text: string) => {
 	await assertTelegramOk(response, 'Telegram sendMessage');
 };
 
-export const sendTelegramAudio = async (audioUrl: string) => {
-	if (!audioUrl || !audioUrl.startsWith('http')) {
-		throw new Error(`Invalid audio URL: ${audioUrl}`);
+export const sendTelegramAudio = async (enclosure: Enclosure) => {
+	const { url, length, declaredType } = enclosure;
+
+	if (!url || !url.startsWith('http')) {
+		throw new Error(`Invalid audio URL: ${url}`);
 	}
 
-	// Extract filename from URL
-	const { filename, cleanTitle } = extractAudioFilename(audioUrl);
+	const { filename, cleanTitle } = extractAudioFilename(url);
+	const title = stripExtension(cleanTitle);
+	const mimeType = mimeFor(url, declaredType);
 
-	// Download the file and upload as multipart form data
-	const audioResponse = await fetch(audioUrl);
+	if (length > MAX_AUDIO_BYTES) {
+		throw new Error(
+			`Audio is too large to send: ${length} bytes exceeds the ${MAX_AUDIO_BYTES} byte limit. ` +
+				'Re-publish the episode as an mp3 — a full-length WAV will always exceed this.'
+		);
+	}
+
+	// Preferred path: hand Telegram the URL. Downloading into the worker risks
+	// exhausting the 128 MB isolate long before the 50 MB guard below fires — a
+	// 104 MB WAV episode is what surfaced this.
+	if (length > 0 && length <= MAX_URL_SEND_BYTES) {
+		const response = await fetch(telegramUrl('sendAudio'), {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				chat_id: env.MAIN_CHAT_ID,
+				audio: url,
+				title,
+			}),
+		});
+
+		await assertTelegramOk(response, 'Telegram sendAudio (by URL)');
+		console.log(`Sent audio by URL: ${url} (${length} bytes)`);
+		return;
+	}
+
+	// Fallback: buffer and upload. Used between 20 and 50 MB, or when the feed
+	// omitted the length and the URL limit cannot be ruled out.
+	console.log(`Buffering audio for upload: ${url} (${length || 'unknown'} bytes)`);
+
+	const audioResponse = await fetch(url);
 
 	if (!audioResponse.ok) {
 		throw new Error(`Failed to download audio: ${audioResponse.status} ${audioResponse.statusText}`);
@@ -65,26 +129,26 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 
 	// Parse metadata
 	let duration: number | undefined;
-	let title = cleanTitle;
+	let uploadTitle = title;
 	let performer: string | undefined;
 
 	try {
 		const uint8Array = new Uint8Array(audioBuffer);
-		const metadata = await parseBuffer(uint8Array);
+		const metadata = await parseBuffer(uint8Array, mimeType);
 
 		if (metadata.format.duration) {
 			duration = Math.round(metadata.format.duration);
 		}
 
 		if (metadata.common.title) {
-			title = metadata.common.title;
+			uploadTitle = metadata.common.title;
 		}
 
 		if (metadata.common.artist) {
 			performer = metadata.common.artist;
 		}
 
-		console.log(`Extracted metadata - Duration: ${duration}s, Title: ${title}, Performer: ${performer}`);
+		console.log(`Extracted metadata - Duration: ${duration}s, Title: ${uploadTitle}, Performer: ${performer}`);
 	} catch (error) {
 		console.error('Failed to parse audio metadata:', error);
 		// Fallback to defaults if parsing fails
@@ -93,8 +157,8 @@ export const sendTelegramAudio = async (audioUrl: string) => {
 	// Create multipart form data
 	const formData = new FormData();
 	formData.append('chat_id', env.MAIN_CHAT_ID);
-	formData.append('audio', new Blob([audioBuffer], { type: 'audio/mpeg' }), filename);
-	formData.append('title', title);
+	formData.append('audio', new Blob([audioBuffer], { type: mimeType }), filename);
+	formData.append('title', uploadTitle);
 
 	if (duration) {
 		formData.append('duration', duration.toString());

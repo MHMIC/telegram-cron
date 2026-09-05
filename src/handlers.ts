@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { getLatestPost, getPublishedAt, WordPressPost } from './wordpress';
 import { sendTelegramAudio, sendErrorNotification } from './telegram';
-import { getHTML, getAudioUrl } from './audio';
+import { getEnclosure } from './feed';
 import { getLastSentAt, setLastSentAt } from './storage';
 import { secretsMatch } from './utils';
 
@@ -20,10 +20,9 @@ const describeError = (error: unknown) => (error instanceof Error ? error.messag
 export const send = async (post: WordPressPost) => {
 	console.log(`Starting send operation for post: ${post.slug}`);
 
-	const html = await getHTML(post.slug);
-	const audioSrc = getAudioUrl(html);
+	const enclosure = await getEnclosure(CATEGORY, post.slug);
 
-	await sendTelegramAudio(audioSrc);
+	await sendTelegramAudio(enclosure);
 
 	console.log('Send operation completed successfully');
 };
