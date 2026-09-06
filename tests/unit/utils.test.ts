@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractAudioFilename, secretsMatch } from '../../src/utils';
+import { escapeHtml, extractAudioFilename, htmlToText, secretsMatch } from '../../src/utils';
 
 describe('utils', () => {
 	describe('extractAudioFilename', () => {
@@ -84,6 +84,38 @@ describe('utils', () => {
 
 		it('should reject a prefix of the expected secret', () => {
 			expect(secretsMatch('s3cret', 's3cret-token')).toBe(false);
+		});
+	});
+
+	describe('htmlToText', () => {
+		it('should decode HTML entities', () => {
+			expect(htmlToText('Rasoolullah &#8217;s Ummah &amp; Us')).toBe('Rasoolullah ’s Ummah & Us');
+		});
+
+		it('should strip tags', () => {
+			expect(htmlToText('<em>Patience</em> and <strong>Prayer</strong>')).toBe('Patience and Prayer');
+		});
+
+		it('should collapse whitespace', () => {
+			expect(htmlToText('  Patience \n\t and   Prayer  ')).toBe('Patience and Prayer');
+		});
+
+		it('should return an empty string for empty input', () => {
+			expect(htmlToText('')).toBe('');
+		});
+	});
+
+	describe('escapeHtml', () => {
+		it('should escape the characters that break out of markup', () => {
+			expect(escapeHtml(`<script>alert("x" & 'y')</script>`)).toBe('&lt;script&gt;alert(&quot;x&quot; &amp; &#39;y&#39;)&lt;/script&gt;');
+		});
+
+		it('should escape ampersands before the entities it introduces', () => {
+			expect(escapeHtml('a & b < c')).toBe('a &amp; b &lt; c');
+		});
+
+		it('should leave plain text untouched', () => {
+			expect(escapeHtml('Patience and Prayer')).toBe('Patience and Prayer');
 		});
 	});
 });

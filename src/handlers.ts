@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { getLatestPost, getPublishedAt, WordPressPost } from './wordpress';
 import { sendTelegramAudio, sendErrorNotification } from './telegram';
 import { getHTML, getAudioUrl } from './audio';
+import { sendReminderEmail } from './email';
 import { getLastSentAt, setLastSentAt } from './storage';
 import { secretsMatch } from './utils';
 
@@ -14,8 +15,10 @@ const jsonResponse = (body: Record<string, unknown>, status: number) =>
 const describeError = (error: unknown) => (error instanceof Error ? error.message : 'Unknown error');
 
 /**
- * Sends the audio attached to a post. Errors propagate to the caller, which owns
- * error notification, so a single failure is only reported once.
+ * Sends the audio attached to a post to Telegram, then emails the same reminder
+ * to the configured addresses. Errors from the Telegram send propagate to the
+ * caller, which owns error notification, so a single failure is only reported
+ * once.
  */
 export const send = async (post: WordPressPost) => {
 	console.log(`Starting send operation for post: ${post.slug}`);
@@ -23,7 +26,21 @@ export const send = async (post: WordPressPost) => {
 	const html = await getHTML(post.slug);
 	const audioSrc = getAudioUrl(html);
 
+	// Telegram is the primary channel and goes first: if it fails there is
+	// nothing to announce by email either.
 	await sendTelegramAudio(audioSrc);
+
+	// The audio has already gone out by this point, so a failed email must not
+	// fail the run. Throwing here would leave the KV timestamp unwritten and
+	// re-send the same audio to Telegram on the next tick, which is a worse
+	// outcome than a missing email. Report it and carry on.
+	try {
+		await sendReminderEmail(post, audioSrc);
+	} catch (error) {
+		const errorMessage = `Reminder email failed for ${post.slug}: ${describeError(error)}`;
+		console.error(errorMessage);
+		await sendErrorNotification(errorMessage);
+	}
 
 	console.log('Send operation completed successfully');
 };

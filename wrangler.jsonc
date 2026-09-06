@@ -10,6 +10,11 @@
 	"observability": {
 		"enabled": true
 	},
+	"send_email": [
+		{
+			"name": "SEND_EMAIL"
+		}
+	],
 	"kv_namespaces": [
 		{
 			"binding": "MHMIC_TELEGRAM_BOT",

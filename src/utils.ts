@@ -1,3 +1,5 @@
+import { load } from 'cheerio';
+
 /**
  * Extracts and cleans filename from a URL for audio files
  * @param url - The URL to extract filename from
@@ -32,4 +34,21 @@ export function secretsMatch(provided: string, expected: string): boolean {
 	}
 
 	return mismatch === 0;
+}
+
+/**
+ * Renders an HTML fragment as plain text.
+ *
+ * WordPress serves titles with entities already encoded (`&#8217;`, `&amp;`),
+ * which would otherwise show up literally in an email subject line.
+ */
+export function htmlToText(html: string): string {
+	return load(html).root().text().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Escapes text for interpolation into an HTML document.
+ */
+export function escapeHtml(text: string): string {
+	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }

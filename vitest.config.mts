@@ -15,6 +15,8 @@ export default defineConfig({
 					MAIN_CHAT_ID: 'test-main-chat',
 					NOTIFICATIONS_CHAT_ID: 'test-notifications-chat',
 					TRIGGER_SECRET: 'test-trigger-secret',
+					EMAIL_FROM: 'reminders@mhmic.org',
+					EMAIL_TO: 'subscriber@example.com',
 				},
 			},
 		}),

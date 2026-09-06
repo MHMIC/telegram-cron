@@ -16,6 +16,10 @@ vi.mock('../../src/audio', () => ({
 	getAudioUrl: vi.fn(() => 'https://files.mhmic.org/a-reminder.mp3'),
 }));
 
+vi.mock('../../src/email', () => ({
+	sendReminderEmail: vi.fn(),
+}));
+
 vi.mock('../../src/storage', () => ({
 	getLastSentAt: vi.fn(),
 	setLastSentAt: vi.fn(),
@@ -25,6 +29,7 @@ import { scheduledHandler, fetchHandler } from '../../src/handlers';
 import { getLatestPost, getPublishedAt } from '../../src/wordpress';
 import { sendTelegramAudio, sendErrorNotification } from '../../src/telegram';
 import { getLastSentAt, setLastSentAt } from '../../src/storage';
+import { sendReminderEmail } from '../../src/email';
 
 const buildPost = (dateGmt: string, slug = 'a-reminder'): WordPressPost => ({
 	id: 1,
@@ -58,6 +63,7 @@ beforeEach(() => {
 	vi.mocked(setLastSentAt).mockReset().mockResolvedValue();
 	vi.mocked(sendTelegramAudio).mockReset().mockResolvedValue();
 	vi.mocked(sendErrorNotification).mockReset().mockResolvedValue();
+	vi.mocked(sendReminderEmail).mockReset().mockResolvedValue();
 });
 
 describe('scheduledHandler', () => {
@@ -119,6 +125,56 @@ describe('scheduledHandler', () => {
 		await expect(scheduledHandler(cronEvent)).rejects.toThrow(/boom/);
 
 		expect(sendErrorNotification).toHaveBeenCalledOnce();
+	});
+});
+
+describe('email notifications', () => {
+	it('should email the reminder after the audio is sent', async () => {
+		await scheduledHandler(cronEvent);
+
+		expect(sendReminderEmail).toHaveBeenCalledWith(NEWER, 'https://files.mhmic.org/a-reminder.mp3');
+	});
+
+	it('should not email when there is no new post', async () => {
+		vi.mocked(getLatestPost).mockResolvedValue(OLDER);
+
+		await scheduledHandler(cronEvent);
+
+		expect(sendReminderEmail).not.toHaveBeenCalled();
+	});
+
+	it('should not email when the Telegram send fails', async () => {
+		vi.mocked(sendTelegramAudio).mockRejectedValue(new Error('boom'));
+
+		await expect(scheduledHandler(cronEvent)).rejects.toThrow(/boom/);
+
+		expect(sendReminderEmail).not.toHaveBeenCalled();
+	});
+
+	it('should record the timestamp even when the email fails', async () => {
+		vi.mocked(sendReminderEmail).mockRejectedValue(new Error('not a verified destination'));
+
+		await scheduledHandler(cronEvent);
+
+		// The audio already went out, so re-running the send would double-post it.
+		expect(setLastSentAt).toHaveBeenCalledWith('fr', getPublishedAt(NEWER));
+	});
+
+	it('should report a failed email without failing the run', async () => {
+		vi.mocked(sendReminderEmail).mockRejectedValue(new Error('not a verified destination'));
+
+		await expect(scheduledHandler(cronEvent)).resolves.toBeUndefined();
+
+		expect(sendErrorNotification).toHaveBeenCalledOnce();
+		expect(vi.mocked(sendErrorNotification).mock.calls[0][0]).toMatch(/Reminder email failed/);
+	});
+
+	it('should return 200 from the manual trigger when only the email fails', async () => {
+		vi.mocked(sendReminderEmail).mockRejectedValue(new Error('not a verified destination'));
+
+		const response = await fetchHandler(triggerRequest());
+
+		expect(response.status).toBe(200);
 	});
 });
 

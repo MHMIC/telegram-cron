@@ -11,6 +11,8 @@ interface WorkerSecrets {
 	MAIN_CHAT_ID: string;
 	NOTIFICATIONS_CHAT_ID: string;
 	TRIGGER_SECRET: string;
+	EMAIL_FROM: string;
+	EMAIL_TO: string;
 }
 
 declare namespace Cloudflare {
