@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { escapeHtml, extractAudioFilename, htmlToText, secretsMatch } from '../../src/utils';
+import { escapeHtml, extractAudioFilename, htmlToText, redactEmails, secretsMatch } from '../../src/utils';
 
 describe('utils', () => {
 	describe('extractAudioFilename', () => {
@@ -116,6 +116,28 @@ describe('utils', () => {
 
 		it('should leave plain text untouched', () => {
 			expect(escapeHtml('Patience and Prayer')).toBe('Patience and Prayer');
+		});
+	});
+
+	describe('redactEmails', () => {
+		it('should mask the local part and keep the domain', () => {
+			expect(redactEmails('rejected: fajr@googlegroups.com')).toBe('rejected: ***@googlegroups.com');
+		});
+
+		it('should mask every address in the string', () => {
+			expect(redactEmails('a@x.com and b@y.co.uk')).toBe('***@x.com and ***@y.co.uk');
+		});
+
+		it('should mask local parts containing dots and plus signs', () => {
+			expect(redactEmails('first.last+tag@example.com')).toBe('***@example.com');
+		});
+
+		it('should leave text with no addresses unchanged', () => {
+			expect(redactEmails('Telegram sendAudio failed: 400 - Bad Request')).toBe('Telegram sendAudio failed: 400 - Bad Request');
+		});
+
+		it('should not treat a bare domain as an address', () => {
+			expect(redactEmails('see mhmic.org for details')).toBe('see mhmic.org for details');
 		});
 	});
 });

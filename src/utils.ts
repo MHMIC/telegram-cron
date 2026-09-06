@@ -52,3 +52,14 @@ export function htmlToText(html: string): string {
 export function escapeHtml(text: string): string {
 	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+/**
+ * Masks the local part of any email address in a string, keeping the domain.
+ *
+ * Error text is forwarded to the notifications chat, and a rejection from the
+ * mail provider can quote the address it rejected. The domain is the part worth
+ * reading there; the full address stays in the logs.
+ */
+export function redactEmails(text: string): string {
+	return text.replace(/[A-Za-z0-9._%+'-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g, '***@$1');
+}

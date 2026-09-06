@@ -136,6 +136,23 @@ describe('sendReminderEmail', () => {
 
 		expect(send).toHaveBeenCalledTimes(2);
 	});
+
+	it('should keep recipient addresses out of the error it throws', async () => {
+		// The message is forwarded to the notifications chat, so it must not
+		// carry the recipient list.
+		env.EMAIL_TO = 'bad@example.com, good@example.com';
+		send.mockImplementation(async (message: { to: string }) => {
+			if (message.to === 'bad@example.com') {
+				throw new Error('not a verified destination');
+			}
+
+			return { messageId: 'test-message-id' };
+		});
+
+		await expect(sendReminderEmail(POST, AUDIO_URL)).rejects.toThrow(
+			expect.objectContaining({ message: expect.not.stringContaining('bad@example.com') }),
+		);
+	});
 });
 
 describe('sendReminderEmail against the real binding', () => {

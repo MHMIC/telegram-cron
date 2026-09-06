@@ -76,7 +76,8 @@ provider. It does add a DMARC record at `_dmarc.yourdomain.com` — review that
 step if the domain already publishes one.
 
 A rejected recipient fails only that one address; the rest are still attempted,
-and the failure is reported to `NOTIFICATIONS_CHAT_ID`.
+and the failure is reported to `NOTIFICATIONS_CHAT_ID` with addresses masked to
+their domain — the full detail stays in the Workers logs.
 
 Messages carry `Auto-Submitted: auto-generated` so that a recipient's
 out-of-office does not reply back to a list.

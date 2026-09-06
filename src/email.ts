@@ -101,7 +101,10 @@ export const sendReminderEmail = async (post: Pick<WordPressPost, 'title' | 'lin
 
 			console.log(`Reminder email sent to ${to} (${messageId})`);
 		} catch (error) {
-			failures.push(`${to} (${error instanceof Error ? error.message : 'Unknown error'})`);
+			// The address is deliberately absent: this message ends up in the
+			// notifications chat, which does not need the recipient list. The line
+			// logged below keeps the full detail.
+			failures.push(error instanceof Error ? error.message : 'Unknown error');
 			console.error(`Failed to send reminder email to ${to}:`, error);
 		}
 	}
