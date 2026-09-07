@@ -59,7 +59,12 @@ export function escapeHtml(text: string): string {
  * Error text is forwarded to the notifications chat, and a rejection from the
  * mail provider can quote the address it rejected. The domain is the part worth
  * reading there; the full address stays in the logs.
+ *
+ * The dotted part of the domain is optional so a single-label address like
+ * `user@localhost` is masked too — anything with an `@` is redacted rather than
+ * only addresses that look like FQDNs. It stays a separate group from the label
+ * so a trailing sentence period is left outside the match.
  */
 export function redactEmails(text: string): string {
-	return text.replace(/[A-Za-z0-9._%+'-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g, '***@$1');
+	return text.replace(/[A-Za-z0-9._%+'-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)/g, '***@$1');
 }

@@ -136,6 +136,14 @@ describe('utils', () => {
 			expect(redactEmails('Telegram sendAudio failed: 400 - Bad Request')).toBe('Telegram sendAudio failed: 400 - Bad Request');
 		});
 
+		it('should mask a single-label domain', () => {
+			expect(redactEmails('rejected: user@localhost')).toBe('rejected: ***@localhost');
+		});
+
+		it('should leave a trailing sentence period outside the mask', () => {
+			expect(redactEmails('rejected user@example.com.')).toBe('rejected ***@example.com.');
+		});
+
 		it('should not treat a bare domain as an address', () => {
 			expect(redactEmails('see mhmic.org for details')).toBe('see mhmic.org for details');
 		});

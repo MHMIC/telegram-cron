@@ -10,6 +10,11 @@
 	"observability": {
 		"enabled": true
 	},
+	// `wrangler types` generates the secret bindings from this list, so their
+	// types are produced the same way as every other binding.
+	"secrets": {
+		"required": ["TELEGRAM_BOT_TOKEN", "MAIN_CHAT_ID", "NOTIFICATIONS_CHAT_ID", "TRIGGER_SECRET", "EMAIL_FROM", "EMAIL_TO"]
+	},
 	"send_email": [
 		{
 			"name": "SEND_EMAIL"

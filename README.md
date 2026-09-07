@@ -27,7 +27,9 @@ has already gone out.
 ## Configuration
 
 All values are Cloudflare secrets — there is no `.env` file in production.
-See `.env.example` for the list.
+The names are declared under `secrets.required` in `wrangler.jsonc`, which is
+what `wrangler types` generates their bindings from, so adding a secret means
+adding it there as well. See `.env.example` for the list.
 
 ```
 npx wrangler secret put TELEGRAM_BOT_TOKEN
