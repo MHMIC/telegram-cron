@@ -19,7 +19,6 @@ const respondWith = (body: string, init: ResponseInit = {}) =>
 
 beforeEach(() => {
 	vi.spyOn(console, 'log').mockImplementation(() => {});
-	vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -40,12 +39,12 @@ describe('getEnclosure', () => {
 		expect(enclosure.declaredType).toBe('audio/mpeg');
 	});
 
-	it('should fall back to the newest item when the feed has not caught up with the slug', async () => {
+	// Sending the newest item instead would deliver the *previous* episode's
+	// audio and mark the new post as sent, so the real audio would never go out.
+	it('should throw rather than fall back when the feed has not caught up with the slug', async () => {
 		respondWith(feed(item('newest-one', 'https://media.blubrry.com/x/newest.mp3')));
 
-		const enclosure = await getEnclosure('FR', 'not-in-the-feed-yet');
-
-		expect(enclosure.url).toBe('https://media.blubrry.com/x/newest.mp3');
+		await expect(getEnclosure('FR', 'not-in-the-feed-yet')).rejects.toThrow(/No feed item matched slug "not-in-the-feed-yet"/);
 	});
 
 	// The regression that started this: a wav episode still has an enclosure even
@@ -65,6 +64,22 @@ describe('getEnclosure', () => {
 		const enclosure = await getEnclosure('FR', 'slug');
 
 		expect(enclosure.url).toBe('https://media.blubrry.com/x/a.mp3?one=1&two=2');
+	});
+
+	it('should read single-quoted and unquoted enclosure attributes', async () => {
+		respondWith(
+			feed(`
+	<item>
+		<link>https://mhmic.org/fajrreminders/slug/</link>
+		<enclosure url='https://media.blubrry.com/x/single.mp3' length=8600000 type='audio/mpeg' />
+	</item>`)
+		);
+
+		const enclosure = await getEnclosure('FR', 'slug');
+
+		expect(enclosure.url).toBe('https://media.blubrry.com/x/single.mp3');
+		expect(enclosure.length).toBe(8_600_000);
+		expect(enclosure.declaredType).toBe('audio/mpeg');
 	});
 
 	it('should throw when the item has no enclosure', async () => {

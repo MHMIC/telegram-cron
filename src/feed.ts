@@ -35,9 +35,15 @@ const decodeEntities = (value: string): string =>
 
 const ITEM_RE = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
 
+// Feed generators vary in how they quote attributes, so double, single and
+// unquoted values are all accepted. The leading \b keeps `type` from matching
+// the tail of an unrelated attribute name.
 const attr = (tag: string, name: string): string | null => {
-	const match = tag.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, 'i'));
-	return match ? decodeEntities(match[1]) : null;
+	const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i'));
+	if (!match) {
+		return null;
+	}
+	return decodeEntities(match[1] ?? match[2] ?? match[3]);
 };
 
 const text = (item: string, tag: string): string | null => {
@@ -70,9 +76,14 @@ const toEnclosure = (item: string): Enclosure | null => {
 
 /**
  * Resolves the media file for a post by matching the feed item whose link or
- * guid contains the slug. Falls back to the newest item when no item matches,
- * since feeds are cached more aggressively than the REST API and may lag a
- * freshly published post by a few minutes.
+ * guid contains the slug.
+ *
+ * Throws when no item matches. Feeds are cached more aggressively than the REST
+ * API and can lag a freshly published post by a few minutes, but falling back to
+ * the newest item would send the *previous* episode's audio — and the caller
+ * records the post as delivered on success, so the real audio would never go
+ * out. Failing instead leaves the position unchanged and the next cron tick
+ * retries once the feed catches up.
  */
 export const getEnclosure = async (category: string, slug: string): Promise<Enclosure> => {
 	const feedUrl = FEEDS[category];
@@ -103,10 +114,10 @@ export const getEnclosure = async (category: string, slug: string): Promise<Encl
 	});
 
 	if (!matched) {
-		console.warn(`No feed item matched slug "${slug}"; falling back to the newest item`);
+		throw new Error(`No feed item matched slug "${slug}" — the feed may not have caught up with the post yet`);
 	}
 
-	const enclosure = toEnclosure(matched ?? items[0]);
+	const enclosure = toEnclosure(matched);
 
 	if (!enclosure) {
 		throw new Error(`No audio enclosure in the podcast feed for "${slug}" — check the episode was published with a media file attached`);
