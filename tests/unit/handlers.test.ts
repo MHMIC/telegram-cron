@@ -11,9 +11,12 @@ vi.mock('../../src/telegram', () => ({
 	sendErrorNotification: vi.fn(),
 }));
 
-vi.mock('../../src/audio', () => ({
-	getHTML: vi.fn(async () => '<html></html>'),
-	getAudioUrl: vi.fn(() => 'https://files.mhmic.org/a-reminder.mp3'),
+vi.mock('../../src/feed', () => ({
+	getEnclosure: vi.fn(async () => ({
+		url: 'https://files.mhmic.org/a-reminder.mp3',
+		length: 8_600_000,
+		declaredType: 'audio/mpeg',
+	})),
 }));
 
 vi.mock('../../src/storage', () => ({
