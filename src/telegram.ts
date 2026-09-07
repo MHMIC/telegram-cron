@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { extractAudioFilename } from './utils';
+import { extractAudioFilename, redactEmails } from './utils';
 import { parseBuffer } from 'music-metadata';
 
 // Telegram rejects bot uploads larger than 50 MB, and the whole file is held in
@@ -119,7 +119,7 @@ export const sendErrorNotification = async (error: string) => {
 	}
 
 	try {
-		await sendMessage(env.NOTIFICATIONS_CHAT_ID, `🚨 MHMIC Bot Error:\n\n${error}`);
+		await sendMessage(env.NOTIFICATIONS_CHAT_ID, `🚨 MHMIC Bot Error:\n\n${redactEmails(error)}`);
 		console.log('Error notification sent successfully');
 	} catch (notificationError) {
 		console.error('Failed to send error notification:', notificationError);

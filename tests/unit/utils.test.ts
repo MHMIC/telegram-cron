@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractAudioFilename, secretsMatch } from '../../src/utils';
+import { escapeHtml, extractAudioFilename, htmlToText, redactEmails, secretsMatch } from '../../src/utils';
 
 describe('utils', () => {
 	describe('extractAudioFilename', () => {
@@ -84,6 +84,68 @@ describe('utils', () => {
 
 		it('should reject a prefix of the expected secret', () => {
 			expect(secretsMatch('s3cret', 's3cret-token')).toBe(false);
+		});
+	});
+
+	describe('htmlToText', () => {
+		it('should decode HTML entities', () => {
+			expect(htmlToText('Rasoolullah &#8217;s Ummah &amp; Us')).toBe('Rasoolullah ’s Ummah & Us');
+		});
+
+		it('should strip tags', () => {
+			expect(htmlToText('<em>Patience</em> and <strong>Prayer</strong>')).toBe('Patience and Prayer');
+		});
+
+		it('should collapse whitespace', () => {
+			expect(htmlToText('  Patience \n\t and   Prayer  ')).toBe('Patience and Prayer');
+		});
+
+		it('should return an empty string for empty input', () => {
+			expect(htmlToText('')).toBe('');
+		});
+	});
+
+	describe('escapeHtml', () => {
+		it('should escape the characters that break out of markup', () => {
+			expect(escapeHtml(`<script>alert("x" & 'y')</script>`)).toBe('&lt;script&gt;alert(&quot;x&quot; &amp; &#39;y&#39;)&lt;/script&gt;');
+		});
+
+		it('should escape ampersands before the entities it introduces', () => {
+			expect(escapeHtml('a & b < c')).toBe('a &amp; b &lt; c');
+		});
+
+		it('should leave plain text untouched', () => {
+			expect(escapeHtml('Patience and Prayer')).toBe('Patience and Prayer');
+		});
+	});
+
+	describe('redactEmails', () => {
+		it('should mask the local part and keep the domain', () => {
+			expect(redactEmails('rejected: fajr@googlegroups.com')).toBe('rejected: ***@googlegroups.com');
+		});
+
+		it('should mask every address in the string', () => {
+			expect(redactEmails('a@x.com and b@y.co.uk')).toBe('***@x.com and ***@y.co.uk');
+		});
+
+		it('should mask local parts containing dots and plus signs', () => {
+			expect(redactEmails('first.last+tag@example.com')).toBe('***@example.com');
+		});
+
+		it('should leave text with no addresses unchanged', () => {
+			expect(redactEmails('Telegram sendAudio failed: 400 - Bad Request')).toBe('Telegram sendAudio failed: 400 - Bad Request');
+		});
+
+		it('should mask a single-label domain', () => {
+			expect(redactEmails('rejected: user@localhost')).toBe('rejected: ***@localhost');
+		});
+
+		it('should leave a trailing sentence period outside the mask', () => {
+			expect(redactEmails('rejected user@example.com.')).toBe('rejected ***@example.com.');
+		});
+
+		it('should not treat a bare domain as an address', () => {
+			expect(redactEmails('see mhmic.org for details')).toBe('see mhmic.org for details');
 		});
 	});
 });

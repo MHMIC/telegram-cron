@@ -1,3 +1,5 @@
+import { load } from 'cheerio';
+
 /**
  * Extracts and cleans filename from a URL for audio files
  * @param url - The URL to extract filename from
@@ -32,4 +34,37 @@ export function secretsMatch(provided: string, expected: string): boolean {
 	}
 
 	return mismatch === 0;
+}
+
+/**
+ * Renders an HTML fragment as plain text.
+ *
+ * WordPress serves titles with entities already encoded (`&#8217;`, `&amp;`),
+ * which would otherwise show up literally in an email subject line.
+ */
+export function htmlToText(html: string): string {
+	return load(html).root().text().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Escapes text for interpolation into an HTML document.
+ */
+export function escapeHtml(text: string): string {
+	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Masks the local part of any email address in a string, keeping the domain.
+ *
+ * Error text is forwarded to the notifications chat, and a rejection from the
+ * mail provider can quote the address it rejected. The domain is the part worth
+ * reading there; the full address stays in the logs.
+ *
+ * The dotted part of the domain is optional so a single-label address like
+ * `user@localhost` is masked too — anything with an `@` is redacted rather than
+ * only addresses that look like FQDNs. It stays a separate group from the label
+ * so a trailing sentence period is left outside the match.
+ */
+export function redactEmails(text: string): string {
+	return text.replace(/[A-Za-z0-9._%+'-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)/g, '***@$1');
 }
